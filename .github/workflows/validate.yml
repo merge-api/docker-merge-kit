@@ -1,0 +1,49 @@
+name: Validate kit
+
+# `sbx kit validate` is a pure spec parse: it does not boot a microVM, so it
+# runs fine on a stock ubuntu-latest runner with no KVM and no `sbx login`.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Install sbx
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Track the latest tagged sbx so we notice spec drift early — kits
+          # are experimental and the schema is still moving. Pin VERSION to a
+          # tag here if a release ever breaks the build.
+          VERSION=$(curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            https://api.github.com/repos/docker/sbx-releases/releases/latest \
+            | jq -er .tag_name)
+          echo "Using sbx ${VERSION}"
+          mkdir -p "${RUNNER_TEMP}/sbx"
+          curl -fsSL \
+            "https://github.com/docker/sbx-releases/releases/download/${VERSION}/DockerSandboxes-linux-amd64.tar.gz" \
+            -o "${RUNNER_TEMP}/sbx.tar.gz"
+          tar -xzf "${RUNNER_TEMP}/sbx.tar.gz" -C "${RUNNER_TEMP}/sbx"
+          SBX_BIN=$(find "${RUNNER_TEMP}/sbx" -type f -name sbx -perm -u+x | head -n1)
+          if [ -z "$SBX_BIN" ]; then
+            echo "::error::Could not locate the sbx binary in the release tarball"
+            exit 1
+          fi
+          echo "$(dirname "$SBX_BIN")" >> "$GITHUB_PATH"
+
+      - name: sbx version
+        run: sbx version
+
+      - name: Validate kit spec
+        run: sbx kit validate ./
