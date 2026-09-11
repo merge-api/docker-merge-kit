@@ -42,6 +42,29 @@ Then sign in, which the MCP gateway requires:
 sbx login
 ```
 
+**Give your agent its own model-provider credential.** This is separate from
+anything the kit does, and it is the most common first-run failure: without it
+the agent exits immediately with `ERROR: agent exited with code 1` and no
+explanation. For Claude Code:
+
+```bash
+sbx secret set anthropic
+```
+
+Use the service matching your agent — `sbx secret set` supports `anthropic`,
+`openai`, `google`, `copilot`, `cursor`, `devin`, `droid`, and others. Claude
+Code can also sign in with OAuth instead of an API key.
+
+To be clear about which credential does what:
+
+| Credential | Purpose | Supplied by |
+| --- | --- | --- |
+| Model provider (e.g. Anthropic) | Lets the agent run at all | `sbx secret set <service>` |
+| Merge Agent Handler OAuth | Authorizes the tool calls | `sbx mcp add merge` (step 1 below) |
+
+Neither one enters the sandbox: the provider credential is proxy-managed by the
+built-in agent kit, and the Merge token stays in your host keychain.
+
 **Use an agent with MCP-at-startup support.** The kit itself is a plain mixin
 and will layer onto any agent sandbox, but the MCP pairing below only works
 with agents that configure MCP at startup. Docker currently lists:
