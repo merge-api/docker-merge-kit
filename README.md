@@ -179,9 +179,8 @@ determines whether the sandbox can reach the server." Gateway-routed traffic is
 governed as MCP activity; network policy is what governs traffic that leaves
 the sandbox directly.
 
-So on the `--static-mcp merge` path described above, this allow rule is most
-likely never exercised — the MCP calls are not sandbox egress. It is kept
-anyway because:
+So on the `--static-mcp merge` path described above, this allow rule is never
+exercised — the MCP calls are not sandbox egress. It is kept anyway because:
 
 - **It is a hook for the direct-API path.** Anything that calls Agent Handler
   straight from inside the VM — a `curl` against the REST API, a script, a
@@ -196,11 +195,23 @@ Handler. Agent Handler brokers those calls server-side and holds those
 credentials itself, so the sandbox needs no route to Salesforce, Slack,
 Workday, or anything else.
 
-> **Not independently load-tested.** This section reflects Docker's documented
-> architecture, not a live packet trace. Verifying it end to end means running
-> the pairing with and without the rule and diffing `sbx policy log`, which
-> needs an authenticated `sbx` and a Merge account. See the PR that introduced
-> this section for the exact reproduction steps.
+> **Verified empirically.** Running the pairing on `sbx` v0.42.1 with a live
+> Merge account — 717 tools listed and a successful `salesforce__validate_credential`
+> call — produced this `sbx policy log`:
+>
+> ```
+> SANDBOX             TYPE      HOST                             RULE
+> claude-docker-kit   network   api.anthropic.com:443
+> claude-docker-kit   network   mcp-gateway.docker.internal:80   <daemon-managed alias>
+> claude-docker-kit   network   ports.ubuntu.com:80
+> claude-docker-kit   network   download.docker.com:443
+> ```
+>
+> `ah-api.merge.dev` does not appear. The sandbox's MCP traffic terminates at
+> `mcp-gateway.docker.internal`; the gateway makes the outbound call host-side.
+> The global policy did not allow `ah-api.merge.dev` either, so had the traffic
+> crossed the boundary it would have needed this kit's rule and would have been
+> logged.
 
 ## Enterprise / governed orgs
 
