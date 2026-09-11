@@ -1,0 +1,89 @@
+schemaVersion: "2"
+kind: mixin
+name: merge-agent-handler
+# The KIT's version, not Agent Handler's. It covers this spec and the network
+# policy; the hosted Agent Handler API floats independently and a new connector
+# or tool pack there does not bump this.
+version: "1.0.0"
+displayName: Merge Agent Handler
+description: >-
+  Gives a sandboxed agent access to Merge Agent Handler's tool catalog —
+  hundreds of enterprise SaaS tools behind one MCP endpoint — with all
+  third-party credentials held server-side by Agent Handler and the MCP
+  OAuth token held on the host, never in the sandbox.
+sourceURL: https://github.com/merge-api/merge-agent-handler-kit
+licenses:
+  - Apache-2.0
+
+permissions:
+  network:
+    allow:
+      # Everything Agent Handler needs is this one host: the MCP endpoint
+      # (/mcp), and the OAuth authorization server that protects it
+      # (/o/authorize/, /o/token/, /o/register/, /o/revoke_token/) are all
+      # served from ah-api.merge.dev over 443. Verified: no cross-host
+      # redirects, no separate auth/CDN origin.
+      #
+      # Deliberately NOT allowed: the SaaS systems Agent Handler talks to
+      # (Salesforce, Slack, Workday, ...). Agent Handler brokers those calls
+      # server-side and holds those credentials itself, so the sandbox never
+      # needs egress to them. Adding them here would widen the blast radius
+      # for no functional gain.
+      - ah-api.merge.dev:443
+
+# No `credentials:` block, deliberately.
+#
+# ah-api.merge.dev/mcp is OAuth-protected and rejects raw API keys outright
+# (`{"detail":"OAuth authentication required."}`), advertising RFC 9728/8414
+# metadata with Dynamic Client Registration. `sbx mcp add` discovers that
+# metadata and runs the authorization flow on the HOST, storing the token in
+# the host OS credential store — so the isolation this kit would otherwise buy
+# with a proxy-managed apiKey is already provided by the MCP gateway.
+#
+# Declaring an apiKey inject on ah-api.merge.dev here would be actively
+# harmful: the proxy would overwrite the gateway's OAuth Authorization header
+# on the same domain and break MCP. See README "Why there is no credential
+# block" for the full rationale.
+
+agentInstructions:
+  content: |
+    ## Merge Agent Handler
+
+    Merge Agent Handler is available in this sandbox as an MCP server
+    (typically registered as `merge`). It is a single, authenticated gateway
+    to hundreds of enterprise SaaS systems — CRM, HRIS, ATS, ticketing,
+    accounting, file storage, and more — exposed as a catalog of tools.
+
+    ### When to reach for it
+
+    Use Agent Handler whenever a task needs real data or an action in a
+    third-party business system rather than in this repository. Typical
+    cases: looking up a customer, account, or opportunity; reading or filing
+    a ticket; fetching employee or candidate records; posting a message;
+    listing or retrieving documents.
+
+    Discover what is actually available by listing the MCP server's tools
+    before assuming a capability exists. The catalog depends on which
+    connectors the operator has enabled, so it varies between deployments —
+    do not guess tool names.
+
+    ### Do not authenticate to third-party systems yourself
+
+    Agent Handler holds the credentials for every downstream system and
+    brokers the calls on your behalf. You are already authenticated through
+    it.
+
+    Because of that:
+
+    - Do not look for, ask the user for, or use API keys, OAuth tokens,
+      passwords, or session cookies for Salesforce, Slack, Workday, or any
+      other downstream system.
+    - Do not try to call those systems' APIs directly. This sandbox's network
+      policy only permits `ah-api.merge.dev`, so such attempts will fail — and
+      the correct fix is to find the right Agent Handler tool, not to request
+      wider network access.
+    - Do not attempt to read or exfiltrate the Agent Handler OAuth token. It
+      is held on the host, outside this sandbox, by design.
+
+    If a system you need is not in the tool catalog, say so and stop rather
+    than routing around Agent Handler.
