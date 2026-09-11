@@ -47,3 +47,26 @@ jobs:
 
       - name: Validate kit spec
         run: sbx kit validate ./
+
+      # Negative control. `sbx kit validate` exits 1 on a bad spec, but that is
+      # the whole basis for this workflow gating anything — so assert it rather
+      # than trust it. Without this, a validate step that silently stopped
+      # failing would look identical to a green build.
+      - name: Assert a broken spec is rejected
+        run: |
+          set -euo pipefail
+          bad=$(mktemp -d)
+          # A v1 field in a v2 spec is a decode error per the kit reference.
+          cat > "$bad/spec.yaml" <<'EOF'
+          schemaVersion: "2"
+          kind: mixin
+          name: broken-control
+          network:
+            allowedDomains:
+              - example.com
+          EOF
+          if sbx kit validate "$bad"; then
+            echo "::error::Negative control passed validation — the validate step is not gating anything"
+            exit 1
+          fi
+          echo "Negative control correctly rejected."
