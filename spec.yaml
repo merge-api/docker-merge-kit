@@ -4,7 +4,7 @@ name: merge-agent-handler
 # The KIT's version, not Agent Handler's. It covers this spec and the network
 # policy; the hosted Agent Handler API floats independently and a new connector
 # or tool pack there does not bump this.
-version: "1.0.0"
+version: "1.0.1"
 displayName: Merge Agent Handler
 description: >-
   Gives a sandboxed agent access to Merge Agent Handler's tool catalog —
@@ -49,10 +49,14 @@ agentInstructions:
   content: |
     ## Merge Agent Handler
 
-    Merge Agent Handler is available in this sandbox as an MCP server
-    (typically registered as `merge`). It is a single, authenticated gateway
-    to hundreds of enterprise SaaS systems — CRM, HRIS, ATS, ticketing,
-    accounting, file storage, and more — exposed as a catalog of tools.
+    Merge Agent Handler is a single, authenticated gateway to enterprise SaaS
+    systems — CRM, HRIS, ATS, ticketing, accounting, file storage, and more —
+    exposed as a catalog of tools.
+
+    It reaches you through the sandbox's MCP gateway, so the MCP server you
+    see is named `mcp-gateway`, not `merge`. Its tools are named
+    `<connector>__<action>`, for example `salesforce__list_accounts` or
+    `slack__post_message`.
 
     ### When to reach for it
 
@@ -62,10 +66,29 @@ agentInstructions:
     a ticket; fetching employee or candidate records; posting a message;
     listing or retrieving documents.
 
-    Discover what is actually available by listing the MCP server's tools
-    before assuming a capability exists. The catalog depends on which
-    connectors the operator has enabled, so it varies between deployments —
-    do not guess tool names.
+    ### Finding the right tool
+
+    **Use `search_tools` first.** Describe what you want to accomplish in its
+    `intent` argument. Do not start by listing every tool: the full catalog
+    runs to thousands of tools, and a plain tool listing shows only the subset
+    already granted to this account.
+
+    `search_tools` returns two groups, and the difference matters:
+
+    - `tools` — granted to this account. You can call these now.
+    - `requestable_tools` — real tools that exist but this account cannot
+      currently use. They are not missing capabilities.
+
+    So a connector absent from the tool list is not proof the capability does
+    not exist. If what you need is in `requestable_tools`, you can call
+    `request_tool_access` for it, but the request stays pending until an
+    administrator approves it — so tell the user rather than waiting on it.
+
+    A tool returning `reauth_required` means that connector is simply not
+    linked yet on the Agent Handler side. Report that; do not try to
+    authenticate it yourself.
+
+    Never guess tool names.
 
     ### Do not authenticate to third-party systems yourself
 

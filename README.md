@@ -110,7 +110,7 @@ Keychain, Windows Credential Manager, Linux Secret Service).
 Pin an explicit version tag:
 
 ```bash
-sbx run claude --kit docker.io/mergeapi/merge-agent-handler:1.0.0 --static-mcp merge
+sbx run claude --kit docker.io/mergeapi/merge-agent-handler:1.0.1 --static-mcp merge
 ```
 
 Kit signatures cover `spec.yaml` and `files/`, but not which artifact a mutable

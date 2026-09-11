@@ -32,7 +32,7 @@ Registration, so no `--client-id` is needed.
 **2. Run a sandbox with the kit and the server:**
 
 ```bash
-sbx run claude --kit docker.io/mergeapi/merge-agent-handler:1.0.0 --static-mcp merge
+sbx run claude --kit docker.io/mergeapi/merge-agent-handler:1.0.1 --static-mcp merge
 ```
 
 Pin the version tag. Kit signatures cover `spec.yaml` and `files/`, but not
