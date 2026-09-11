@@ -138,7 +138,7 @@ To re-authorize or revoke, re-run `sbx mcp add`, or `sbx mcp rm merge`.
 A kit can declare a proxy-managed credential so the agent sees only a sentinel
 while the host proxy injects the real secret. That is the right tool when a
 service authenticates with a static API key. It is the wrong tool here, for
-three reasons:
+two reasons:
 
 1. **The endpoint is OAuth-only.** `/mcp` rejects API keys outright. An
    `apiKey` block pointed at it would never authenticate.
@@ -146,12 +146,6 @@ three reasons:
    host-side OAuth and keeps the token in the host credential store. The
    sandbox never holds it — which is exactly the property a proxy-managed
    credential would have been buying.
-3. **Declaring one would break MCP.** Credential injection is keyed on
-   *domain*, not path or scheme. An `apiKey` injecting `Authorization` on
-   `ah-api.merge.dev` would overwrite the gateway's OAuth header on the same
-   host. The proxy does not disambiguate two auth schemes on one domain — the
-   contrib [`gitlab` kit](https://github.com/docker/sbx-kits-contrib/tree/main/gitlab)
-   documents this same failure mode.
 
 If you specifically need the API-key/tool-pack surface, that is a different
 kit shape and worth filing as a separate issue.
