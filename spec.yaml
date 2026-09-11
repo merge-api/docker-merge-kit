@@ -40,10 +40,10 @@ permissions:
 # the host OS credential store — so the isolation this kit would otherwise buy
 # with a proxy-managed apiKey is already provided by the MCP gateway.
 #
-# Declaring an apiKey inject on ah-api.merge.dev here would be actively
-# harmful: the proxy would overwrite the gateway's OAuth Authorization header
-# on the same domain and break MCP. See README "Why there is no credential
-# block" for the full rationale.
+# Measured on sbx v0.42.1: gateway-routed MCP traffic never crosses the sandbox
+# network boundary (sbx policy log records mcp-gateway.docker.internal, never
+# ah-api.merge.dev), so an apiKey inject here would simply never fire on the MCP
+# path rather than help. See README "Why there is no credential block".
 
 agentInstructions:
   content: |
