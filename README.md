@@ -7,9 +7,8 @@ a single authenticated gateway to hundreds of enterprise SaaS systems (CRM,
 HRIS, ATS, ticketing, accounting, file storage) exposed as one MCP tool
 catalog.
 
-The kit opens exactly one host on the sandbox network, tells the agent what
-Agent Handler is and when to use it, and leaves every credential outside the
-sandbox VM.
+The kit tells the agent what Agent Handler is and when to use it, pins the
+sandbox's egress policy, and leaves every credential outside the sandbox VM.
 
 > **Status:** v1. Docker's kit format is experimental and still changing; this
 > kit targets `schemaVersion: "2"` and is validated against `sbx` v0.42.1.
@@ -18,8 +17,8 @@ sandbox VM.
 
 | Kit declares | Value |
 | --- | --- |
-| `kind` | `mixin` — layers onto any agent sandbox (`claude`, `codex`, `gemini`, …) |
-| `permissions.network.allow` | `ah-api.merge.dev:443` — nothing else |
+| `kind` | `mixin` — layers onto any agent sandbox |
+| `permissions.network.allow` | `ah-api.merge.dev:443` — nothing else. Defense in depth; see [Network access](#network-access-this-kit-opens) |
 | `agentInstructions` | What Agent Handler is, when to reach for it, and not to authenticate to third-party systems directly |
 | `credentials` | **none** — see [Why there is no credential block](#why-there-is-no-credential-block) |
 
@@ -42,6 +41,20 @@ Then sign in, which the MCP gateway requires:
 ```bash
 sbx login
 ```
+
+**Use an agent with MCP-at-startup support.** The kit itself is a plain mixin
+and will layer onto any agent sandbox, but the MCP pairing below only works
+with agents that configure MCP at startup. Docker currently lists:
+
+- Claude Code
+- Codex
+- Devin
+- Gemini
+- Kiro
+- OpenCode
+
+With any other agent the kit still applies, but the `merge` server will not be
+wired up and the tool catalog will not appear.
 
 ## Usage
 
@@ -71,11 +84,21 @@ Keychain, Windows Credential Manager, Linux Secret Service).
 
 ### 2. Run a sandbox with the kit and the server
 
+Pin an explicit version tag:
+
 ```bash
-sbx run claude --kit docker.io/merge/merge-agent-handler-kit:latest --static-mcp merge
+sbx run claude --kit docker.io/mergeapi/merge-agent-handler:1.0.0 --static-mcp merge
 ```
 
-Or against a local checkout of this repo:
+Kit signatures cover `spec.yaml` and `files/`, but not which artifact a mutable
+tag happens to point at. Pinning a version is what makes the signature mean
+something, so prefer it anywhere reproducibility matters — CI, shared developer
+setups, anything governed.
+
+`docker.io/mergeapi/merge-agent-handler:latest` also exists as a convenience for
+throwaway local experiments, at the cost of that guarantee.
+
+To run against a local checkout of this repo:
 
 ```bash
 sbx run claude --kit ./ --static-mcp merge
@@ -144,16 +167,89 @@ permissions:
       - ah-api.merge.dev:443
 ```
 
-That single host serves both the MCP endpoint (`/mcp`) and the OAuth
-authorization server that protects it (`/o/authorize/`, `/o/token/`,
-`/o/register/`, `/o/revoke_token/`). There are no cross-host redirects and no
-separate auth or CDN origin.
+**This rule is defense in depth, not the thing that makes the kit work.** It is
+worth being precise about, because the obvious reading is wrong.
 
-Notably, the kit does **not** open egress to the SaaS systems Agent Handler
-talks to. Agent Handler brokers those calls server-side and holds those
+Per Docker's documented architecture, the agent inside the sandbox connects
+only to the sandbox's MCP gateway, and the gateway is what talks to a remote
+MCP server. Docker draws the line explicitly: MCP access policies govern
+"requests handled by Docker's MCP gateway," whereas "a direct connection to a
+remote MCP server is outbound sandbox traffic, so network access policy
+determines whether the sandbox can reach the server." Gateway-routed traffic is
+governed as MCP activity; network policy is what governs traffic that leaves
+the sandbox directly.
+
+So on the `--static-mcp merge` path described above, this allow rule is most
+likely never exercised — the MCP calls are not sandbox egress. It is kept
+anyway because:
+
+- **It is a hook for the direct-API path.** Anything that calls Agent Handler
+  straight from inside the VM — a `curl` against the REST API, a script, a
+  future non-gateway integration — *is* sandbox egress, and needs this rule.
+- **It documents intent.** The kit states the one host it is entitled to reach,
+  which is what a reviewer and an org admin both want to see.
+- **It costs nothing.** Under a default-deny posture the rule grants exactly
+  one host and port.
+
+What the rule does **not** do is grant egress to the SaaS systems behind Agent
+Handler. Agent Handler brokers those calls server-side and holds those
 credentials itself, so the sandbox needs no route to Salesforce, Slack,
-Workday, or anything else. Deny rules elsewhere in your composition still take
-precedence over this allow.
+Workday, or anything else.
+
+> **Not independently load-tested.** This section reflects Docker's documented
+> architecture, not a live packet trace. Verifying it end to end means running
+> the pairing with and without the rule and diffing `sbx policy log`, which
+> needs an authenticated `sbx` and a Merge account. See the PR that introduced
+> this section for the exact reproduction steps.
+
+## Enterprise / governed orgs
+
+Two things change once Docker AI Governance is active for your organization,
+and both will bite a deployer who assumes the kit is self-sufficient.
+
+### Kit-defined allow rules stop granting access
+
+Under organization governance, only **organization** allow rules grant network
+access. Local and kit-defined allow rules become inactive and cannot expand
+what the org permits. Deny rules still apply from every source:
+
+| Rule | Evaluated under organization governance |
+| --- | --- |
+| Organization allow | Yes |
+| Organization deny | Yes |
+| Local allow | No |
+| Local deny | Yes |
+| Kit-defined allow | **No** |
+| Kit-defined deny | Yes |
+
+So in a governed org, **an administrator must allow `ah-api.merge.dev`
+centrally.** This kit's allow rule will not do it. Concretely, the org network
+policy needs a `connect:tcp` rule for `ah-api.merge.dev` (or
+`ah-api.merge.dev:443`).
+
+This is also why the rule above is defense in depth rather than load-bearing:
+in exactly the environments that matter most, it is inactive by design.
+
+### MCP registration and tool calls are separately governed
+
+Network policy is not the only gate. MCP access policies are organization
+policies written in Cedar, and they apply at two distinct points:
+
+- **Registration** — when a developer runs `sbx mcp add merge --url ...`,
+  matched on the registered name and resolved server attributes.
+- **Use** — when the gateway handles a tool call, resource read, or prompt
+  retrieval from an already-registered server.
+
+A rule at one point does not govern the other, and MCP activity is default-deny
+under governance. So the `merge` registration may need admin approval, and tool
+calls may *separately* need to be permitted or may require interactive
+confirmation. If registration succeeds but tools fail at call time, look at
+use-time MCP policy before suspecting the kit.
+
+See Docker's
+[MCP access policies](https://docs.docker.com/ai/sandboxes/governance/access-controls/mcp/)
+and
+[network access policies](https://docs.docker.com/ai/sandboxes/governance/access-controls/network/).
 
 ## On kit-level MCP registration
 
@@ -184,7 +280,8 @@ Inspect what the loader actually parsed:
 sbx kit inspect ./ --json
 ```
 
-CI runs `sbx kit validate` on every pull request — see
+CI runs `sbx kit validate` on every pull request, plus a negative control that
+asserts a deliberately broken spec is rejected — see
 [.github/workflows/validate.yml](.github/workflows/validate.yml).
 
 Publishing to Docker Hub (`sbx kit push`) and signing are handled separately
