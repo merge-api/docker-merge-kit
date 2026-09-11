@@ -11,7 +11,7 @@ description: >-
   hundreds of enterprise SaaS tools behind one MCP endpoint — with all
   third-party credentials held server-side by Agent Handler and the MCP
   OAuth token held on the host, never in the sandbox.
-sourceURL: https://github.com/merge-api/merge-agent-handler-kit
+sourceURL: https://github.com/merge-api/docker-merge-kit
 licenses:
   - Apache-2.0
 
