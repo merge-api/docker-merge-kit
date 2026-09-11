@@ -1,0 +1,21 @@
+# Packed kit artifacts (built by `sbx kit pack`, never committed)
+*.zip
+
+# Kit argument files may contain environment-specific values
+*.args
+kit.args
+
+# Cosign signing material — must never be committed
+*.key
+cosign.key
+*.pem
+
+# Local sbx state / scratch
+.sbx/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
