@@ -130,6 +130,33 @@ sbx run claude --kit ./ --static-mcp merge
 `--static-mcp` pre-loads the `merge` server at creation. Omit it to use dynamic
 mode, where the agent discovers and attaches registered servers itself.
 
+## Example developer workflow: investigate a customer issue
+
+The connectivity smoke test proves that the kit is wired correctly. The more
+useful test is whether an agent can combine a checked-out application with
+customer context that is not stored in Git.
+
+The included read-only triage demo asks a sandboxed agent to inspect application
+code, retrieve an account and its recent support context through Agent Handler,
+and return an incident brief with cited code locations, observed customer data,
+a likely failure path, and the next debugging step:
+
+```bash
+./examples/customer-issue-triage.sh \
+  "Acme Test Account" \
+  "Webhook deliveries started returning 401 after key rotation" \
+  /path/to/application
+```
+
+Use a test account present in your connected CRM or support system. The demo
+uses `search_tools` to adapt to the connectors granted to the account and makes
+no writes. This gives the developer one investigation across local code and
+business-system records without copying CRM or support credentials into the
+sandbox.
+
+See [`examples/customer-issue-triage.sh`](examples/customer-issue-triage.sh)
+for the complete prompt and preflight checks.
+
 ## How you supply your Merge credential
 
 **You do not paste a Merge API key into the sandbox, and the kit never asks for

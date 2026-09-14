@@ -12,10 +12,19 @@ set -euo pipefail
 KIT_REF="${KIT_REF:-./}"
 SERVER_NAME="${SERVER_NAME:-merge}"
 SANDBOX="${SANDBOX:-merge-kit-smoke}"
+WORKSPACE="${1:-.}"
 
-if ! sbx mcp ls | awk '{print $1}' | grep -qx "$SERVER_NAME"; then
+MCP_LIST="$(sbx mcp ls)"
+if ! printf '%s\n' "$MCP_LIST" | awk '{print $1}' | grep -qx "$SERVER_NAME"; then
   echo "MCP server '$SERVER_NAME' is not registered. Run:" >&2
   echo "  sbx mcp add $SERVER_NAME --url https://ah-api.merge.dev/mcp" >&2
+  exit 1
+fi
+
+if printf '%s\n' "$MCP_LIST" | awk -v name="$SERVER_NAME" \
+  '$1 == name && /needs auth/ {found=1} END {exit !found}'; then
+  echo "MCP server '$SERVER_NAME' needs authentication. Run:" >&2
+  echo "  sbx mcp auth $SERVER_NAME" >&2
   exit 1
 fi
 
@@ -28,8 +37,16 @@ fi
 
 # --static-mcp is fixed at creation, so reuse an existing sandbox rather than
 # trying to re-specify it.
-if ! sbx ls | awk '{print $1}' | grep -qx "$SANDBOX"; then
-  sbx create claude --name "$SANDBOX" --kit "$KIT_REF" --static-mcp "$SERVER_NAME"
+if sbx ls | awk '{print $1}' | grep -qx "$SANDBOX"; then
+  EXISTING_AGENT="$(sbx ls | awk -v name="$SANDBOX" '$1 == name {print $2}')"
+  if [[ "$EXISTING_AGENT" != "claude" ]]; then
+    echo "Sandbox '$SANDBOX' uses agent '$EXISTING_AGENT', not 'claude'." >&2
+    echo "Choose another name with SANDBOX=<name> and run again." >&2
+    exit 1
+  fi
+else
+  sbx create claude --name "$SANDBOX" --kit "$KIT_REF" \
+    --static-mcp "$SERVER_NAME" "$WORKSPACE"
 fi
 
 sbx exec "$SANDBOX" -- claude -p "Report how many tools the \"$SERVER_NAME\" MCP
